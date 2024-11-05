@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الحجوزات</title>
+    <link rel="stylesheet" href="style.css"> <!-- أضف تنسيق CSS هنا -->
+</head>
+<body>
+    <div class="container">
+        <section class="title-2">
+            <h2>إدارة الحجوزات</h2>
+            <table class="table" id="bookingTable">
+                <thead>
+                    <tr>
+                        <th>الاسم</th>
+                        <th>رقم الهاتف</th>
+                        <th>التاريخ</th>
+                        <th>الفترة</th>
+                        <th>السعر</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <div id="popupForm" class="popup">
+            <div class="form-content">
+                <span class="closeBtn">&times;</span>
+                <h2 class="PopTitle" id="popupTitle">تعديل الحجز</h2>
+                <form class="popupstyle" id="adminForm">
+                    <input type="hidden" id="bookId">
+                    <label for="name">الاسم</label>
+                    <input type="text" id="name" required>
+                    <label for="Phone">رقم الهاتف</label>
+                    <input type="text" id="Phone" required>
+                    <label for="Date">التاريخ</label>
+                    <input type="date" id="Date" required>
+                    <label for="period">الفترة</label>
+                    <select id="period" required>
+                        <div id="time" class="periods" required>
+                            <option value="Evening" class="period" id="Morning"
+                            onclick="selectPeriod(event, 'Morning', '9:00 AM - 4:00 PM', '25 OMR')">
+                            صباحًا <br>
+                            9:00 AM - 4:00 PM<br>
+                            <span class="price">25 ريال عماني</span>
+    
+                            </option>
+                            <option value="Morning" class="period"  id="Evening"
+                            onclick="selectPeriod(event, 'Evening', '5:00 PM - 12:00 AM', '40 OMR')">
+                            مساءً <br>
+                            5:00 PM - 12:00 AM<br>
+                            <span class="price">40 ريال عماني</span>
+                            </option>
+                            <option value="Full Night" class="period"id="fullNight"
+                            onclick="selectPeriod(event, 'Full Night', '12:30 AM - 8:00 AM', '30 OMR')">
+                            مبيت <br>
+                            12:30 AM - 8:00 AM<br>
+                            <span class="price">30 ريال عماني</span>
+    
+                            </option>
+                            <option value="Overnight" class="period" id="fullDay"
+                            onclick="selectPeriod(event, 'Full Day', '9:00 AM - 12:00 AM', '60 OMR')">
+                            يوم كامل <br>
+                            9:00 AM - 12:00 AM<br>
+                            <span class="price">60 ريال عماني</span>
+    
+                            </option>
+                       
+                     
+                    </select>
+                    <button type="submit" id="submitBtn">حفظ التعديلات</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
+        import { getDatabase, ref, set, get, remove } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgbRxofhjd_788QdE7BUNxR_sO58WpzfY",
+            authDomain: "julas-camp.firebaseapp.com",
+            databaseURL: "https://julas-camp-default-rtdb.firebaseio.com",
+            projectId: "julas-camp",
+            storageBucket: "julas-camp.appspot.com",
+            messagingSenderId: "398458036302",
+            appId: "1:398458036302:web:96c36bba22751a8be2a31f",
+            measurementId: "G-EQ9WY4498D"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const bookingTableBody = document.querySelector('#bookingTable tbody');
+        const popupForm = document.getElementById('popupForm');
+        const adminForm = document.getElementById('adminForm');
+        const closeBtn = document.querySelector('.closeBtn');
+
+        // دالة لتحميل الحجوزات من قاعدة البيانات
+        function loadBookings() {
+            const bookingsRef = ref(database, 'bookings/');
+            get(bookingsRef).then(snapshot => {
+                if (snapshot.exists()) {
+                    const bookings = snapshot.val();
+                    bookingTableBody.innerHTML = ''; // تفريغ الجدول الحالي
+                    for (const date in bookings) {
+                        for (const period in bookings[date]) {
+                            const booking = bookings[date][period];
+                            const price = calculatePrice(booking.date, period);
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${booking.name}</td>
+                                <td>${booking.phone}</td>
+                                <td>${booking.date}</td>
+                                <td>${booking.time}</td>
+                                <td>${price} ريال</td>
+                                <td>
+                                    <button class="deleteBtn" data-id="${date}/${period}">حذف</button>
+                                </td>
+                            `;
+                            bookingTableBody.appendChild(row);
+                        }
+                    }
+                    addEventListeners();
+                }
+            });
+        }
+
+        // دالة لحساب السعر بناءً على اليوم والفترة
+        function calculatePrice(date, period) {
+            const day = new Date(date).getDay(); // 0 = الأحد, 1 = الإثنين, ..., 6 = السبت
+            let price;
+
+            // تحديد الأسعار حسب الأيام
+            if (day === 3 || day === 4 || day === 5) { // الأربعاء، الخميس، الجمعة
+                // أسعار الويكند
+                switch (period) {
+                    case "Morning":
+                        price = 25;
+                        break;
+                    case "Evening":
+                        price = 40;
+                        break;
+                    case "Overnight":
+                        price = 30;
+                        break;
+                    case "Full Night":
+                        price = 60;
+                        break;
+                }
+            } else {
+                // أسعار الأيام العادية
+                switch (period) {
+                    case "Morning":
+                        price = 20;
+                        break;
+                    case "Evening":
+                        price = 30;
+                        break;
+                    case "Overnight":
+                        price = 30;
+                        break;
+                    case "Full Night":
+                        price = 45;
+                        break;
+                }
+            }
+            return price;
+        }
+
+           // الحصول على التاريخ الحالي
+    const today = new Date();
+    
+    // إضافة يوم واحد إلى التاريخ الحالي
+    today.setDate(today.getDate() + 1);
+    
+    // صيغة التاريخ في YYYY-MM-DD
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0'); // يناير هو 0!
+    const yyyy = today.getFullYear();
+    const minDate = `${yyyy}-${mm}-${dd}`;
+    
+    // تعيين الحد الأدنى لتاريخ الحجز
+    document.getElementById('Date').setAttribute('min', minDate);
+        // دالة لإضافة مستمعات للأزرار
+        function addEventListeners() {
+            document.querySelectorAll('.editBtn').forEach(button => {
+                button.addEventListener('click', openEditForm);
+            });
+
+            document.querySelectorAll('.deleteBtn').forEach(button => {
+                button.addEventListener('click', deleteBooking);
+            });
+        }
+
+        // دالة لفتح نافذة تعديل الحجز
+        function openEditForm(event) {
+            const id = event.target.dataset.id.split('/');
+            const date = id[0];
+            const period = id[1];
+            const bookingRef = ref(database, `bookings/${date}/${period}`);
+            get(bookingRef).then(snapshot => {
+                if (snapshot.exists()) {
+                    const booking = snapshot.val();
+                    document.getElementById('bookId').value = `${date}/${period}`;
+                    document.getElementById('name').value = booking.name;
+                    document.getElementById('Phone').value = booking.phone;
+                    document.getElementById('Date').value = booking.date;
+                    document.getElementById('period').value = period;
+                    popupForm.style.display = 'block';
+                }
+            });
+        }
+
+        // دالة لحفظ التعديلات
+        adminForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const id = document.getElementById('bookId').value.split('/');
+            const date = id[0];
+            const period = id[1];
+            const updatedBooking = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('Phone').value,
+                date: document.getElementById('Date').value,
+                time: document.getElementById('period').value
+            };
+            set(ref(database, `bookings/${date}/${period}`), updatedBooking).then(() => {
+                loadBookings(); // إعادة تحميل الحجوزات بعد التعديل
+                popupForm.style.display = 'none'; // إغلاق النافذة
+            });
+        });
+
+        // دالة لحذف الحجز
+        function deleteBooking(event) {
+            const id = event.target.dataset.id.split('/');
+            const date = id[0];
+            const period = id[1];
+            const bookingRef = ref(database, `bookings/${date}/${period}`);
+            remove(bookingRef).then(() => {
+                loadBookings(); // إعادة تحميل الحجوزات بعد الحذف
+            });
+        }
+
+        // إغلاق النافذة المنبثقة
+        closeBtn.addEventListener('click', () => {
+            popupForm.style.display = 'none';
+        });
+
+        // تحميل الحجوزات عند تحميل الصفحة
+        window.onload = loadBookings;
+    </script>
+</body>
+</html>
+
+<style>
+    :root {
+        --main-bg-color: #3f3a3a;
+        --header-bg-color: #615c5c;
+        --primary-button-color: #5483B3;
+        --button-hover-color: #417a9b;
+        --text-color: #ffffff;
+        --placeholder-color: #ddddddc3;
+        --input-bg-color: rgba(255, 255, 255, 0.2);
+        --border-color: #555;
+    }
+
+    body {
+        font-family: 'Poppins', 'Cairo', sans-serif;
+        direction: rtl;
+        color: var(--text-color);
+        background-color: var(--main-bg-color);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 100vw;
+        height: 100vh;
+        box-sizing: border-box;
+        overflow: hidden;
+        /* لإخفاء أي عناصر زائدة */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 10px;
+    }
+
+    header {
+        background-color: var(--header-bg-color);
+        color: var(--text-color);
+        padding: 1rem 0;
+        text-align: center;
+    }
+
+    h1 {
+        margin: 0;
+        font-size: 2rem;
+        color: #ffffffea;
+    }
+
+
+    section {
+        margin-top: 2rem;
+        text-align: center;
+        font-size: 1rem;
+    }
+
+    button {
+        background-color: var(--primary-button-color);
+        color: var(--text-color);
+        padding: 8px 15px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 10px;
+        font-size: 0.75rem;
+    }
+
+    button:hover {
+        background-color: var(--button-hover-color);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.75rem;
+        /* تقليل حجم الخط */
+        text-align: center;
+        text-align: left;
+        /* محاذاة النص داخل مربع النص لليسار */
+
+    }
+
+    table,
+    th,
+    td {
+        border: 1px solid var(--header-bg-color);
+        padding: 5px;
+        /* تقليل حجم الحواف */
+    }
+
+    th,
+    td {
+        border: 1px solid var(--header-bg-color);
+        padding: 0.5rem;
+    }
+
+    th {
+        background-color: var(--header-bg-color);
+    }
+
+    /* Popup styles */
+    .popup {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+    }
+
+    .popup-content {
+        background-color: #2c2c2c;
+        margin: 10% auto;
+        padding: 20px;
+        width: 90%;
+        max-width: 400px;
+        max-height: 80%;
+        overflow-y: auto;
+        border-radius: 10px;
+        border: 1px solid #444;
+        box-sizing: border-box;
+        position: relative;
+
+    }
+
+    .PopTitle {
+        font-size: 1.5rem;
+        color: #ffffff;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+
+    input,
+    select,
+    textarea {
+        width: calc(100% - 32px);
+        padding: 0.875rem;
+        margin-bottom: 0.75rem;
+        border: 1px solid #888;
+        border-radius: 0.5rem;
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #f5f5f5;
+        font-size: 1rem;
+        text-align: left;
+        /* لجعل النص محاذاة لليسار */
+
+    }
+
+    input:focus,
+    textarea:focus {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-color: #aaa;
+        color: #ffffff;
+        outline: none;
+    }
+
+    input::placeholder {
+        color: #ccc;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-weight: 500;
+        font-size: 0.8rem;
+        color: #ffffffcc;
+        direction: rtl;
+        text-align: left;
+        /* لجعل النص محاذاة لليسار */
+
+
+    }
+
+    .periods {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        
+
+    }
+
+    .period {
+        padding: 0.75rem;
+        background-color: #3a3a3a;
+        border-radius: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.7rem;
+        border: 1px solid #666;
+        line-height: 1.5;
+    }
+
+    .period:hover {
+        background-color: #4a4a4a;
+        cursor: pointer;
+    }
+
+    .period .details {
+        display: flex;
+        align-items: center;
+    }
+
+    .period .time,
+    .period .price {
+        font-size: 0.8rem;
+        color: #e0e0e0;
+        margin-left: 1.25rem;
+    }
+
+    .period .price {
+        color: #f66262;
+        font-weight: 700;
+    }
+
+    .titleSelectTime {
+        font-size: 1.2rem;
+        text-align: center;
+        color: #ffeb3b;
+        margin-bottom: 1rem;
+    }
+
+    #popupForm {
+        display: none;
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        justify-content: center;
+        align-items: center;
+        z-index: 999;
+    }
+
+    .form-content {
+        background-color: var(--main-bg-color);
+        padding: 20px;
+        border-radius: 5px;
+        width: 80%;
+        max-width: 400px;
+        color: var(--text-color);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        text-align: left; /* لجعل النص محاذاة لليسار */
+
+    }
+
+    .closeBtn {
+        background-color: transparent;
+        color: #f7e7e7;
+        font-size: 1.5rem;
+        font-weight: bold;
+        cursor: pointer;
+        position: absolute;
+        top: 0.625rem;
+        right: 0.625rem;
+        transition: color 0.3s ease;
+    }
+
+    .closeBtn:hover {
+        color: #ff1a1a;
+    }
+
+    .butSub {
+        background-color: var(--primary-button-color);
+        color: var(--text-color);
+        padding: 0.625rem 1.25rem;
+        border: none;
+        border-radius: 0.3125rem;
+        cursor: pointer;
+        margin-top: 1.25rem;
+        width: 100%;
+        max-width: 200px;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .icon-btn {
+        cursor: pointer;
+        color: #ffffff;
+        /* لون افتراضي للأيقونات */
+        transition: color 0.3s ease, transform 0.3s ease;
+        /* تأثير الانتقال للون والتكبير */
+        font-size: 1.2rem;
+        /* تكبير حجم الأيقونة */
+        margin-bottom: 10px;
+        /* المسافة بين الأيقونات */
+    }
+
+    /* تغيير اللون عند التمرير بالفأرة */
+    .icon-btn:hover {
+        color: #f39c12;
+        /* لون عند التمرير بالفأرة */
+        transform: scale(1.2);
+        /* تكبير الأيقونة عند التمرير */
+    }
+
+    /* تأثير مختلف عند التمرير على أيقونة الحذف */
+    .icon-btn.deleteBtn:hover {
+        color: #e74c3c;
+        /* لون أحمر عند التمرير */
+    }
+
+    /* تحسين ترتيب الأيقونات رأسياً */
+    .icon-container {
+        display: flex;
+        flex-direction: column;
+        /* ترتيب الأيقونات رأسياً */
+        align-items: center;
+        /* توسيط الأيقونات */
+    }
+
+
+
+    /* تحسين التخطيط لشاشات أصغر */
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.65rem;
+            /* تقليل حجم الخط أكثر على الأجهزة الصغيرة */
+        }
+
+        th,
+        td {
+            padding: 4px;
+        }
+
+        button {
+            padding: 6px 10px;
+            font-size: 0.65rem;
+        }
+    }
+
+    /* تحسين التخطيط لشاشات الهواتف الصغيرة */
+    @media (max-width: 480px) {
+        .container {
+            padding: 5px;
+            /* تقليل الحواف حول الصفحة */
+        }
+
+        table {
+            font-size: 0.6rem;
+            /* تقليل حجم الخط بشكل أكبر */
+        }
+
+        th,
+        td {
+            padding: 3px;
+            /* تقليل حجم الحواف أكثر */
+        }
+
+        button {
+            padding: 5px 8px;
+            font-size: 0.6rem;
+        }
+    }
+</style>
+
+
+
+
+
+</html>
